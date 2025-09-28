@@ -1,6 +1,8 @@
 ﻿using System.Security;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -79,6 +81,16 @@ public static class ApiConfiguration {
                 { jwtSecurityScheme, Array.Empty<string>() }
             });
          });
+        services.AddRateLimiter(limiterOptions => limiterOptions
+            .AddSlidingWindowLimiter(policyName: "slidingWindow", options =>
+            {
+                options.PermitLimit = 30;
+                options.Window = TimeSpan.FromMinutes(1);
+                options.SegmentsPerWindow = 10;
+                options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                options.QueueLimit = 10;
+            }));
+
         return services;
     }
 
@@ -86,8 +98,7 @@ public static class ApiConfiguration {
         services.AddScoped<MailConfig>(_ => mailCreds);
         services.AddScoped<JwtConfig>(_ => jwtConfig);
         services.AddScoped<MailService>();
-        services.AddScoped<AuthService>();
-        // services.AddScoped<PostService>();
+        services.AddScoped<AuthService>(); 
     }
 
     private static void AddJwtAuth(this IServiceCollection services, JwtConfig jwtConfig) {
@@ -101,20 +112,20 @@ public static class ApiConfiguration {
                 ValidAudience = jwtConfig.Audience,
                 IssuerSigningKey = new SymmetricSecurityKey(Convert.FromHexString(jwtConfig.Secret))
             };
-            // o.Events = new JwtBearerEvents {
-            //     OnTokenValidated = async context => {
-            //         var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            //         if (string.IsNullOrEmpty(userId)) {
-            //             context.Fail("Invalid token: Missing userId ('sub' claim)");
-            //             return;
-            //         }
-            //         var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
-            //         var exists = await authService.UserExistsAsync(userId);
-            //         if (!exists) {
-            //             context.Fail("Invalid token: This token doesn't belong to a registered user");
-            //         }
-            //     }
-            // };
+            o.Events = new JwtBearerEvents {
+                OnTokenValidated = async context => {
+                    var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (string.IsNullOrEmpty(userId)) {
+                        context.Fail("Invalid token: Missing userId ('sub' claim)");
+                        return;
+                    }
+                    var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
+                    var exists = await authService.UserExistsAsync(userId);
+                    if (!exists) {
+                        context.Fail("Invalid token: This token doesn't belong to a registered user");
+                    }
+                }
+            };
         });
         services.AddAuthorization();
     }

@@ -16,11 +16,25 @@ public class AuthController(AuthService authService) : ControllerBase {
     }
 
     [HttpPost("register")]
+    [Produces("application/json")]
     public async Task<IActionResult> Register(IFormFile? profilePicture, [FromForm] RegisterDTO registrationData) {
         return (await authService.Register(registrationData, profilePicture)).ToActionResult();
     }
 
+    [HttpPost("verify")]
+    [Produces("application/json")]
+    public async Task<IActionResult> Verify(VerifyDTO dto) {
+        return (await authService.Verify(dto.Email, dto.Code)).ToActionResult();
+    }
+
+    [HttpPost("resend-code")]
+    [Produces("application/json")]
+    public async Task<IActionResult> ResendCode(string email) {
+        return (await authService.ResendVerificationCode(email)).ToActionResult();
+    }
+
     [HttpPost("login")]
+    [Produces("application/json")]
     public async Task<IActionResult> Login(LoginDTO dto) {
         return (await authService.Login(dto, HttpContext.Connection.RemoteIpAddress?.ToString())).ToActionResult();
     }

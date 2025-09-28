@@ -11,6 +11,7 @@ public class MailService(MailConfig config) {
         var creds = new NetworkCredential(config.Username, config.Password);
         client.UseDefaultCredentials = false;
         client.EnableSsl = true;
+        client.DeliveryMethod = SmtpDeliveryMethod.Network;
         client.Credentials = creds;
         var from = new MailAddress(config.Username, "no-reply");
         var to = new MailAddress(recipient);
@@ -23,5 +24,4 @@ public class MailService(MailConfig config) {
                        $"<h3>Expires in 1 hour</h3>";
         await client.SendMailAsync(message);
     }
-    
 }

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OpentubeAPI.Data;
 using OpentubeAPI.DTOs;
 using OpentubeAPI.Models;
+using OpentubeAPI.Utilities;
 
 namespace OpentubeAPI.Services;
 
@@ -70,17 +71,57 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         return new Result("Successfully registered, check your email for a verification code.");
     }
 
+    public async Task<Result> Verify(string email, string code) { 
+        email = email.Trim().ToLower();
+        code = code.Trim();
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user is null) 
+            return new Result(new Error("Email", "This email is not registered"));
+        var dbCode = await context.VerificationCodes.FirstOrDefaultAsync(vc => vc.Email == email && vc.Code == code);
+        var isExpired = dbCode is not null && (DateTimeOffset.UtcNow - dbCode.SentDate) >= TimeSpan.FromHours(1);
+        if (dbCode is null || isExpired)
+            return new Result(new Error("Code", "Invalid Code"));
+        context.VerificationCodes.Remove(dbCode);
+        user.Verified = true;
+        await context.SaveChangesAsync();
+        return new Result("Successfully verified");
+    }
+
+    public async Task<Result> ResendVerificationCode(string email) {
+        email = email.Trim().ToLower();
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user is null)
+            return new Result(new Error("Email", "This email is not registered"));
+        if (user.Verified)
+            return new Result(new Error("Email", "This email is already verified"));
+        context.VerificationCodes.RemoveRange(context.VerificationCodes.Where(vc => vc.Email == user.Email));
+        var code = GenerateCode();
+        context.VerificationCodes.Add(
+            new VerificationCode {
+                Email = user.Email,
+                Code = code,
+            }
+        );
+        await context.SaveChangesAsync();
+        _ = mailService.SendCode(code, user.Email);
+        return new Result("Sent a new verification code to your email.");
+    }
+
     public async Task<Result> Login(LoginDTO dto, string? ipAddress) {
         dto.Username = dto.Username.Trim().ToLower();
         var user = await context.Users.FirstOrDefaultAsync(u => u.Username == dto.Username || u.Email == dto.Username);
         var credsError = new Result(new Error("Credentials", "Incorrect username or password"));
         if (user is null) return credsError;
-        // if (!user.Verified) return new Result(new Error("Email", "Email not verified."));
+        if (!user.Verified) return new Result(new Error("Email", "Email not verified."));
         if (!Argon2.Verify(user.PasswordHash, dto.Password)) return credsError;
         user.LastLogin = DateTimeOffset.UtcNow;
         user.LastLoginIP = ipAddress;
         await context.SaveChangesAsync();
         return new Result(new { accessToken = user.GenerateAccessToken(jwtConfig) });
+    }
+
+    public async Task<bool> UserExistsAsync(string userId) {
+        return (await context.Users.FindAsync(userId.ToGuid())) is not null;
     }
 
     private static string GenerateCode() {

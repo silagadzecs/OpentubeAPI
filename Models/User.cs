@@ -14,9 +14,9 @@ public class User {
     [MaxLength(256)] public required string Username { get; init; }
     [MaxLength(256)] public required string Email { get; init; }
     [MaxLength(256)] public required string PasswordHash { get; init; }
-    [MaxLength(256)] public string ProfilePicturePath { get; set; } = "./files/images/public/defaultuser.jpg";  
+    [MaxLength(256)] public string ProfilePicturePath { get; set; } = string.Empty;  
     [MaxLength(50)] public string? LastLoginIP { get; set; }
-    public bool Verified { get; init; }
+    public bool Verified { get; set; }
     public bool DeletionRequested { get; init; }
     public bool Active { get; init; } = true;
     public DateTimeOffset CreationDate { get; init; } = DateTimeOffset.UtcNow;
