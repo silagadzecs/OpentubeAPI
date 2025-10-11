@@ -36,6 +36,12 @@ public class AuthController(AuthService authService) : ControllerBase {
     [HttpPost("login")]
     [Produces("application/json")]
     public async Task<IActionResult> Login(LoginDTO dto) {
-        return (await authService.Login(dto, HttpContext.Connection.RemoteIpAddress?.ToString())).ToActionResult();
+        return (await authService.Login(dto, HttpContext)).ToActionResult();
+    }
+
+    [HttpPost("refresh")]
+    [Produces("application/json")]
+    public async Task<IActionResult> Refresh(string token, string userId) {
+        return (await authService.RefreshTokens(token, userId)).ToActionResult();
     }
 }

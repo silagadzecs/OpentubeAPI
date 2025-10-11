@@ -23,12 +23,12 @@
         </PackageReference>
         <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.7" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+        <PackageReference Include="UAParser" Version="3.1.47" />
     </ItemGroup>
 
     <ItemGroup>
       <Folder Include="Controllers\" />
-      <Folder Include="Files\Images\Public\" />
-      <Folder Include="Files\Video\Public\" />
+      <Folder Include="Files\" />
     </ItemGroup>
 
 </Project>

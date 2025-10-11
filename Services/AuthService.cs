@@ -5,6 +5,7 @@ using OpentubeAPI.Data;
 using OpentubeAPI.DTOs;
 using OpentubeAPI.Models;
 using OpentubeAPI.Utilities;
+using UAParser;
 
 namespace OpentubeAPI.Services;
 
@@ -107,7 +108,7 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         return new Result("Sent a new verification code to your email.");
     }
 
-    public async Task<Result> Login(LoginDTO dto, string? ipAddress) {
+    public async Task<Result> Login(LoginDTO dto, HttpContext httpContext) {
         dto.Username = dto.Username.Trim().ToLower();
         var user = await context.Users.FirstOrDefaultAsync(u => u.Username == dto.Username || u.Email == dto.Username);
         var credsError = new Result(new Error("Credentials", "Incorrect username or password"));
@@ -115,13 +116,47 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         if (!user.Verified) return new Result(new Error("Email", "Email not verified."));
         if (!Argon2.Verify(user.PasswordHash, dto.Password)) return credsError;
         user.LastLogin = DateTimeOffset.UtcNow;
-        user.LastLoginIP = ipAddress;
+        user.LastLoginIP = httpContext.Connection.RemoteIpAddress?.ToString();
+        var uaInfo = Parser.GetDefault().Parse(httpContext.Request.Headers.UserAgent.ToString());
+        var refreshToken = AddRefreshToken(user.Id,
+            $"{uaInfo.UA.Family} on {uaInfo.OS.Family} (Device: {uaInfo.Device.Family})");
         await context.SaveChangesAsync();
-        return new Result(new { accessToken = user.GenerateAccessToken(jwtConfig) });
+        return new Result(new {
+            accessToken = user.GenerateAccessToken(jwtConfig),
+            refreshToken
+        });
+    }
+
+    public async Task<Result> RefreshTokens(string refreshToken, string userId) {
+        var refTokenEntries = await context.UserRefreshTokens
+            .Include(urt => urt.User)
+            .Where(urt => urt.UserId == userId.ToGuid())
+            .ToListAsync();
+        var token = refTokenEntries.FirstOrDefault(rt => Argon2.Verify(rt.RefreshToken, refreshToken));
+        if (token is null) return new Result(new Error("Token", "Invalid refresh token"));
+        var newToken = token.User.GenerateAccessToken(jwtConfig);
+        var newRefreshToken = AddRefreshToken(token.User.Id, token.DeviceInfo);
+        context.UserRefreshTokens.Remove(token);
+        await context.SaveChangesAsync();
+        return new Result(new {
+            accessToken = newToken,
+            refreshToken = newRefreshToken
+        });
     }
 
     public async Task<bool> UserExistsAsync(string userId) {
         return (await context.Users.FindAsync(userId.ToGuid())) is not null;
+    }
+
+    private string AddRefreshToken(Guid userId, string deviceInfo = "Unknown") {
+        var refreshToken = RandomNumberGenerator.GetHexString(64, true);
+        var refreshTokenEntry = new UserRefreshToken {
+            RefreshToken = Argon2.Hash(refreshToken),
+            UserId = userId,
+            DeviceInfo = deviceInfo
+        };
+        context.UserRefreshTokens.Add(refreshTokenEntry);
+        return refreshToken;
     }
 
     private static string GenerateCode() {
