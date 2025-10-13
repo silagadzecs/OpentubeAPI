@@ -3,9 +3,9 @@
 namespace OpentubeAPI.DTOs;
 
 public class Result {
-    private object? Value { get; }
-    private bool Success { get; }
-    public int StatusCode { get; set; }
+    public object? Value { get; private set; }
+    public bool Success { get; init; }
+    public int StatusCode { get; init; }
     private Error[] Errors { get; } = [];
 
     public Result(object value, int statusCode = 200) {

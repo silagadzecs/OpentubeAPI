@@ -1,6 +1,5 @@
 ﻿using System.Text;
-using Microsoft.AspNetCore.Mvc;
-using OpentubeAPI.DTOs;
+using MimeDetective;
 
 namespace OpentubeAPI.Utilities;
 
@@ -44,5 +43,29 @@ public static class Extensions {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 0;
         return query.Skip((page - 1) * pageSize).Take(pageSize);
+    }
+
+    public static string GetMimeType(this byte[] file) {
+        var inspector = new ContentInspectorBuilder() {
+            Definitions = new MimeDetective.Definitions.CondensedBuilder() {
+                UsageType = MimeDetective.Definitions.Licensing.UsageType.PersonalNonCommercial
+            }.Build()
+        }.Build();
+
+        var result = inspector.Inspect(file).OrderByDescending(res => res.Points).FirstOrDefault();
+        return result?.Definition.File.MimeType?.ToLower() ?? "application/octet-stream";
+    }
+    public static string GetMimeType(this Stream file) {
+        var inspector = new ContentInspectorBuilder() {
+            Definitions = new MimeDetective.Definitions.CondensedBuilder() {
+                UsageType = MimeDetective.Definitions.Licensing.UsageType.PersonalNonCommercial
+            }.Build()
+        }.Build();
+        if (!file.CanSeek) throw new InvalidOperationException("Cannot seek stream.");
+        file.Position = 0;
+        var fileBytes = new byte[file.Length];
+        file.ReadExactly(fileBytes, 0, fileBytes.Length);
+        var result = inspector.Inspect(fileBytes).OrderByDescending(res => res.Points).FirstOrDefault();
+        return result?.Definition.File.MimeType?.ToLower() ?? "application/octet-stream";
     }
 }

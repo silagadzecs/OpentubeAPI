@@ -10,8 +10,6 @@ using UAParser;
 namespace OpentubeAPI.Services;
 
 public class AuthService(OpentubeDBContext context, MailService mailService, JwtConfig jwtConfig) {
-    
-    
     public async Task<Result> Register(RegisterDTO dto, IFormFile? profilePicture) {
         dto.Email = dto.Email.Trim().ToLower();
         dto.Username = dto.Username.Trim().ToLower();
@@ -43,21 +41,35 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         };
         
         if (profilePicture is not null) {
-            if (!profilePicture.ContentType.StartsWith("image/")) {
-                return new Result(new Error("profilePicture", "Invalid profile picture file"));
-            }
-            const string dir = "./files/images/public";
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(CDNService.ImagePath);
             var filename = Guid.NewGuid().ToString();
             var extension = profilePicture.FileName.Split(".").Last();
-            var fileDir = Path.Combine(dir, $"{filename}.{extension}");
-            await using var stream = new FileStream(
-                fileDir,
-                FileMode.CreateNew,
-                FileAccess.Write
-            );
-            await profilePicture.CopyToAsync(stream);
+            filename = $"{filename}.{extension}";
+            var fileDir = Path.Combine(CDNService.ImagePath, filename);
+            try {
+                await using var stream = new FileStream(
+                    fileDir,
+                    FileMode.CreateNew,
+                    FileAccess.ReadWrite
+                );
+                await profilePicture.CopyToAsync(stream);
+
+                if (!stream.GetMimeType().StartsWith("image/")) {
+                    File.Delete(fileDir);
+                    return new Result(new Error("profilePicture", "Invalid profile picture file"));
+                }
+            } catch {
+                File.Delete(fileDir);
+                throw;
+            }
+            
             user.ProfilePicturePath = fileDir;
+            await context.MediaFiles.AddAsync(new MediaFile {
+                Filename = filename,
+                FileType = FileType.Image,
+                OwnerId = user.Id,
+                Visibility = FileVisibility.Public
+            });
         }
         var code = GenerateCode();
         await context.VerificationCodes.AddAsync(
@@ -137,7 +149,9 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         var hashedToken = Convert.ToHexString(SHA256.HashData(Convert.FromHexString(refreshToken)));
         var token = await context.UserRefreshTokens
             .Include(urt => urt.User)
-            .FirstOrDefaultAsync(urt => urt.UserId == userId.ToGuid() && urt.RefreshToken == hashedToken);
+            .FirstOrDefaultAsync(urt => urt.UserId == userId.ToGuid() 
+                                        && urt.RefreshToken == hashedToken 
+                                        && DateTimeOffset.UtcNow - urt.Created < TimeSpan.FromHours(jwtConfig.RefreshHours));
         if (token is null) return new Result(new Error("Token", "Invalid refresh token"));
         var (newToken, jti) = token.User.GenerateAccessToken(jwtConfig);
         var newRefreshToken = AddRefreshToken( //Adds a refresh token to the context (without saving changes)
@@ -158,7 +172,9 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
     }
 
     public async Task<bool> AccessTokenValid(string jti) {
-        return await context.UserRefreshTokens.AnyAsync(urt => urt.AccessJti == jti);
+        return await context.UserRefreshTokens.AnyAsync(urt => 
+            urt.AccessJti == jti 
+            && DateTimeOffset.UtcNow - urt.Created < TimeSpan.FromHours(jwtConfig.RefreshHours));
     }
 
     private string AddRefreshToken(Guid userId, string deviceInfo, string ip, string jti) {

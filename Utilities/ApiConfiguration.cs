@@ -99,7 +99,8 @@ public static class ApiConfiguration {
         services.AddScoped<MailConfig>(_ => mailCreds);
         services.AddScoped<JwtConfig>(_ => jwtConfig);
         services.AddScoped<MailService>();
-        services.AddScoped<AuthService>(); 
+        services.AddScoped<AuthService>();
+        services.AddScoped<CDNService>();
     }
 
     private static void AddJwtAuth(this IServiceCollection services, JwtConfig jwtConfig) {

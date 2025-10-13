@@ -1,10 +1,16 @@
-﻿namespace OpentubeAPI.Models;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace OpentubeAPI.Models;
 
 public class MediaFile {
-    public required string Filename { get; set; }
-    public required FileType FileType { get; set; }
-    public required Guid OwnerId { get; set; }
-    public required FileVisibility Visibility { get; set; }
+    public Guid Id { get; init; } = Guid.NewGuid();
+    [MaxLength(256)]
+    public required string Filename { get; init; }
+    public required FileType FileType { get; init; }
+    public required Guid OwnerId { get; init; }
+    public required FileVisibility Visibility { get; init; }
+    
+    public User Owner { get; init; } = null!;
 }
 
 public enum FileVisibility : byte {
