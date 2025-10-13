@@ -42,6 +42,7 @@ public class AuthController(AuthService authService) : ControllerBase {
     [HttpPost("refresh")]
     [Produces("application/json")]
     public async Task<IActionResult> Refresh(string token, string userId) {
+        Console.WriteLine(HttpContext.Connection.RemoteIpAddress?.ToString());
         return (await authService.RefreshTokens(token, userId)).ToActionResult();
     }
 }

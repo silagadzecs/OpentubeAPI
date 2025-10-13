@@ -115,27 +115,36 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         if (user is null) return credsError;
         if (!user.Verified) return new Result(new Error("Email", "Email not verified."));
         if (!Argon2.Verify(user.PasswordHash, dto.Password)) return credsError;
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString();
         user.LastLogin = DateTimeOffset.UtcNow;
-        user.LastLoginIP = httpContext.Connection.RemoteIpAddress?.ToString();
+        user.LastLoginIP = ip;
         var uaInfo = Parser.GetDefault().Parse(httpContext.Request.Headers.UserAgent.ToString());
-        var refreshToken = AddRefreshToken(user.Id,
-            $"{uaInfo.UA.Family} on {uaInfo.OS.Family} (Device: {uaInfo.Device.Family})");
+        var deviceInfo = $"{uaInfo.UA.Family} on {uaInfo.OS.Family} (Device: {uaInfo.Device.Family})";
+        var (accessToken, jti) = user.GenerateAccessToken(jwtConfig);
+        var refreshToken = AddRefreshToken(
+            user.Id,
+            deviceInfo,
+            ip ?? "Unknown",
+            jti);
         await context.SaveChangesAsync();
         return new Result(new {
-            accessToken = user.GenerateAccessToken(jwtConfig),
+            accessToken,
             refreshToken
         });
     }
 
     public async Task<Result> RefreshTokens(string refreshToken, string userId) {
-        var refTokenEntries = await context.UserRefreshTokens
+        var hashedToken = Convert.ToHexString(SHA256.HashData(Convert.FromHexString(refreshToken)));
+        var token = await context.UserRefreshTokens
             .Include(urt => urt.User)
-            .Where(urt => urt.UserId == userId.ToGuid())
-            .ToListAsync();
-        var token = refTokenEntries.FirstOrDefault(rt => Argon2.Verify(rt.RefreshToken, refreshToken));
+            .FirstOrDefaultAsync(urt => urt.UserId == userId.ToGuid() && urt.RefreshToken == hashedToken);
         if (token is null) return new Result(new Error("Token", "Invalid refresh token"));
-        var newToken = token.User.GenerateAccessToken(jwtConfig);
-        var newRefreshToken = AddRefreshToken(token.User.Id, token.DeviceInfo);
+        var (newToken, jti) = token.User.GenerateAccessToken(jwtConfig);
+        var newRefreshToken = AddRefreshToken( //Adds a refresh token to the context (without saving changes)
+            token.User.Id,
+            token.DeviceInfo,
+            token.DeviceIp,
+            jti);
         context.UserRefreshTokens.Remove(token);
         await context.SaveChangesAsync();
         return new Result(new {
@@ -148,12 +157,18 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         return (await context.Users.FindAsync(userId.ToGuid())) is not null;
     }
 
-    private string AddRefreshToken(Guid userId, string deviceInfo = "Unknown") {
+    public async Task<bool> AccessTokenValid(string jti) {
+        return await context.UserRefreshTokens.AnyAsync(urt => urt.AccessJti == jti);
+    }
+
+    private string AddRefreshToken(Guid userId, string deviceInfo, string ip, string jti) {
         var refreshToken = RandomNumberGenerator.GetHexString(64, true);
         var refreshTokenEntry = new UserRefreshToken {
-            RefreshToken = Argon2.Hash(refreshToken),
+            RefreshToken = Convert.ToHexString(SHA256.HashData(Convert.FromHexString(refreshToken))),
             UserId = userId,
-            DeviceInfo = deviceInfo
+            DeviceInfo = deviceInfo,
+            DeviceIp = ip,
+            AccessJti = jti
         };
         context.UserRefreshTokens.Add(refreshTokenEntry);
         return refreshToken;

@@ -12,7 +12,7 @@ public class OpentubeDBContext(DbContextOptions options) : DbContext(options) {
         modelBuilder.Entity<VerificationCode>().HasKey(vc => new {
             vc.Email,
             vc.Code
-        } );
+        });
         modelBuilder.Entity<UserRefreshToken>().HasKey(ut => new {
             ut.UserId,
             ut.RefreshToken

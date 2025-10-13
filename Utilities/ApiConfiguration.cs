@@ -4,6 +4,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OpentubeAPI.Data;
@@ -121,8 +122,14 @@ public static class ApiConfiguration {
                     }
                     var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
                     var exists = await authService.UserExistsAsync(userId);
+                    var jti = context.Principal!.FindFirst(JwtRegisteredClaimNames.Jti)!.Value;
                     if (!exists) {
                         context.Fail("Invalid token: This token doesn't belong to a registered user");
+                        return;
+                    }
+
+                    if (!await authService.AccessTokenValid(jti)) {
+                        context.Fail("Invalid token");
                     }
                 }
             };

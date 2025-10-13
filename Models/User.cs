@@ -23,7 +23,7 @@ public class User {
     public DateTimeOffset? LastLogin { get; set; }
     public UserRole Role { get; init; } = UserRole.User;
     
-    public string GenerateAccessToken(JwtConfig config) {
+    public (string Token, string Jti) GenerateAccessToken(JwtConfig config) {
         var key = new SymmetricSecurityKey(Convert.FromHexString(config.Secret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var jti = Guid.NewGuid().ToString();
@@ -47,7 +47,7 @@ public class User {
             signingCredentials: creds
         );
         var tokenHandler = new JwtSecurityTokenHandler();
-        return tokenHandler.WriteToken(token);
+        return (tokenHandler.WriteToken(token), jti);
     }
 }
 public enum UserRole : byte {

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OpentubeAPI.Data;
 
@@ -11,9 +12,11 @@ using OpentubeAPI.Data;
 namespace OpentubeAPI.Migrations
 {
     [DbContext(typeof(OpentubeDBContext))]
-    partial class OpentubeDBContextModelSnapshot : ModelSnapshot
+    [Migration("20251013094924_AddRefreshIp")]
+    partial class AddRefreshIp
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -95,11 +98,6 @@ namespace OpentubeAPI.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
-                    b.Property<string>("AccessJti")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("nvarchar(36)");
-
                     b.Property<DateTimeOffset>("Created")
                         .HasColumnType("datetimeoffset");
 
@@ -114,9 +112,6 @@ namespace OpentubeAPI.Migrations
                         .HasColumnType("nvarchar(40)");
 
                     b.HasKey("UserId", "RefreshToken");
-
-                    b.HasIndex("AccessJti")
-                        .IsUnique();
 
                     b.ToTable("UserRefreshTokens");
                 });
