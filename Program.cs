@@ -1,20 +1,35 @@
 using OpentubeAPI.Utilities;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .WriteTo.File("./Logs/app.log", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
 
-builder.Configuration.CheckVariables();
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.ConfigureApp(builder.Configuration);
+try {
+    var builder = WebApplication.CreateBuilder(args);
+    builder.Host.UseSerilog();
+    builder.Configuration.CheckVariables();
+    builder.Services.AddControllers();
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
+    builder.Services.ConfigureApp(builder.Configuration);
 
-var app = builder.Build();
-if (app.Environment.IsDevelopment()) {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    var app = builder.Build();
+    if (app.Environment.IsDevelopment()) {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.UseHttpsRedirection();
+    app.UseAuthorization();
+    app.UseRateLimiter();
+    app.MapControllers();
+    app.Run();
 }
-app.UseHttpsRedirection();
-app.UseAuthorization();
-app.UseRateLimiter();
-app.MapControllers();
-app.Run();
+catch (Exception ex) {
+    Log.Fatal(ex, "Application failed to start");
+}
+finally {
+    Log.CloseAndFlush();
+}

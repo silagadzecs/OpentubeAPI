@@ -9,6 +9,7 @@ public class OpentubeDBContext(DbContextOptions options) : DbContext(options) {
     public DbSet<UserRefreshToken>  UserRefreshTokens { get; set; }
     
     public DbSet<MediaFile> MediaFiles { get; set; }
+    public DbSet<Video> Videos { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<VerificationCode>().HasKey(vc => new {
@@ -18,6 +19,10 @@ public class OpentubeDBContext(DbContextOptions options) : DbContext(options) {
         modelBuilder.Entity<UserRefreshToken>().HasKey(ut => new {
             ut.UserId,
             ut.RefreshToken
+        });
+        modelBuilder.Entity<Video>().HasKey(v => new {
+            v.Id,
+            v.VideoFileId
         });
     }
 }

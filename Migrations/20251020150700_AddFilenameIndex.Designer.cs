@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OpentubeAPI.Data;
 
@@ -11,16 +12,15 @@ using OpentubeAPI.Data;
 namespace OpentubeAPI.Migrations
 {
     [DbContext(typeof(OpentubeDBContext))]
-    partial class OpentubeDBContextModelSnapshot : ModelSnapshot
+    [Migration("20251020150700_AddFilenameIndex")]
+    partial class AddFilenameIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "8.0.20")
-                .HasAnnotation("Proxies:ChangeTracking", false)
-                .HasAnnotation("Proxies:CheckEquality", false)
-                .HasAnnotation("Proxies:LazyLoading", true)
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -92,7 +92,7 @@ namespace OpentubeAPI.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<string>("ProfilePicture")
+                    b.Property<string>("ProfilePicturePath")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
@@ -172,36 +172,6 @@ namespace OpentubeAPI.Migrations
                     b.ToTable("VerificationCodes");
                 });
 
-            modelBuilder.Entity("OpentubeAPI.Models.Video", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("VideoFileId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(2500)
-                        .HasColumnType("nvarchar(2500)");
-
-                    b.Property<string>("ThumbnailFilename")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("Id", "VideoFileId");
-
-                    b.HasIndex("VideoFileId");
-
-                    b.ToTable("Videos");
-                });
-
             modelBuilder.Entity("OpentubeAPI.Models.MediaFile", b =>
                 {
                     b.HasOne("OpentubeAPI.Models.User", "Owner")
@@ -222,17 +192,6 @@ namespace OpentubeAPI.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("OpentubeAPI.Models.Video", b =>
-                {
-                    b.HasOne("OpentubeAPI.Models.MediaFile", "VideoFile")
-                        .WithMany()
-                        .HasForeignKey("VideoFileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("VideoFile");
                 });
 #pragma warning restore 612, 618
         }

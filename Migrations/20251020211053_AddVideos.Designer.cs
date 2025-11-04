@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OpentubeAPI.Data;
 
@@ -11,9 +12,11 @@ using OpentubeAPI.Data;
 namespace OpentubeAPI.Migrations
 {
     [DbContext(typeof(OpentubeDBContext))]
-    partial class OpentubeDBContextModelSnapshot : ModelSnapshot
+    [Migration("20251020211053_AddVideos")]
+    partial class AddVideos
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -92,7 +95,7 @@ namespace OpentubeAPI.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<string>("ProfilePicture")
+                    b.Property<string>("ProfilePicturePath")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");

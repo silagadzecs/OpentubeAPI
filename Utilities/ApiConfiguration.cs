@@ -1,6 +1,7 @@
 ﻿using System.Security;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using FFMpegCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -54,7 +55,7 @@ public static class ApiConfiguration {
         });
         
         services.AddDbContext<OpentubeDBContext>(ob => {
-            ob.UseSqlServer(conf["SqlServerConnectionString"]);
+            ob.UseLazyLoadingProxies().UseSqlServer(conf["SqlServerConnectionString"]);
         });
         
         var jwtConfig = conf.GetSection("JwtConfig").Get<JwtConfig>()!;
@@ -91,7 +92,7 @@ public static class ApiConfiguration {
                 options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 options.QueueLimit = 10;
             }));
-
+        GlobalFFOptions.Configure(options => options.BinaryFolder = conf["FFMpegPath"]!);
         return services;
     }
 
@@ -101,6 +102,7 @@ public static class ApiConfiguration {
         services.AddScoped<MailService>();
         services.AddScoped<AuthService>();
         services.AddScoped<CDNService>();
+        services.AddScoped<VideoService>();
     }
 
     private static void AddJwtAuth(this IServiceCollection services, JwtConfig jwtConfig) {

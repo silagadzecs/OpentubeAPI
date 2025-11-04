@@ -10,6 +10,10 @@ using UAParser;
 namespace OpentubeAPI.Services;
 
 public class AuthService(OpentubeDBContext context, MailService mailService, JwtConfig jwtConfig) {
+    public async Task<Result> GetSelf(string userId) {
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId.ToGuid());
+        return new Result(new UserDTO(user!));
+    }
     public async Task<Result> Register(RegisterDTO dto, IFormFile? profilePicture) {
         dto.Email = dto.Email.Trim().ToLower();
         dto.Username = dto.Username.Trim().ToLower();
@@ -63,12 +67,12 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
                 throw;
             }
             
-            user.ProfilePicturePath = fileDir;
+            user.ProfilePicture = filename;
             await context.MediaFiles.AddAsync(new MediaFile {
                 Filename = filename,
                 FileType = FileType.Image,
                 OwnerId = user.Id,
-                Visibility = FileVisibility.Public
+                Visibility = Visibility.Public
             });
         }
         var code = GenerateCode();
@@ -172,9 +176,10 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
     }
 
     public async Task<bool> AccessTokenValid(string jti) {
-        return await context.UserRefreshTokens.AnyAsync(urt => 
-            urt.AccessJti == jti 
-            && DateTimeOffset.UtcNow - urt.Created < TimeSpan.FromHours(jwtConfig.RefreshHours));
+        var refreshToken = await context.UserRefreshTokens.FirstOrDefaultAsync(urt => 
+            urt.AccessJti == jti);
+        if (refreshToken is null) return false;
+        return DateTimeOffset.UtcNow - refreshToken.Created < TimeSpan.FromHours(jwtConfig.AccessHours);
     }
 
     private string AddRefreshToken(Guid userId, string deviceInfo, string ip, string jti) {

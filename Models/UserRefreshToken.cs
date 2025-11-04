@@ -20,5 +20,5 @@ public class UserRefreshToken {
     
     public DateTimeOffset Created { get; init; } = DateTimeOffset.UtcNow;
     //Nav Props
-    public User User { get; init; } = null!;
+    public virtual User User { get; init; } = null!;
 }

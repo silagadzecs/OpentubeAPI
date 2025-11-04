@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -9,10 +10,12 @@ namespace OpentubeAPI.Controllers;
 [ApiController]
 [Route("api/auth")]
 public class AuthController(AuthService authService) : ControllerBase {
+    private string? UserId => User.FindFirstValue(ClaimTypes.NameIdentifier);
+    
     [HttpGet]
     [Authorize]
     public async Task<IActionResult> GetSelf() {
-        return Ok("Not implemented.");
+        return (await authService.GetSelf(UserId!)).ToActionResult();
     }
 
     [HttpPost("register")]
@@ -42,7 +45,6 @@ public class AuthController(AuthService authService) : ControllerBase {
     [HttpPost("refresh")]
     [Produces("application/json")]
     public async Task<IActionResult> Refresh(string token, string userId) {
-        Console.WriteLine(HttpContext.Connection.RemoteIpAddress?.ToString());
         return (await authService.RefreshTokens(token, userId)).ToActionResult();
     }
 }

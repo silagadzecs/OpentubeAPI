@@ -14,7 +14,7 @@ public class User {
     [MaxLength(256)] public required string Username { get; init; }
     [MaxLength(256)] public required string Email { get; init; }
     [MaxLength(256)] public required string PasswordHash { get; init; }
-    [MaxLength(256)] public string ProfilePicturePath { get; set; } = string.Empty;  
+    [MaxLength(256)] public string ProfilePicture { get; set; } = string.Empty;  
     [MaxLength(50)] public string? LastLoginIP { get; set; }
     public bool Verified { get; set; }
     public bool DeletionRequested { get; init; }
