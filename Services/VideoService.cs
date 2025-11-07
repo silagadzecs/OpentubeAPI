@@ -5,6 +5,7 @@ using OpentubeAPI.Data;
 using OpentubeAPI.DTOs;
 using OpentubeAPI.Models;
 using OpentubeAPI.Utilities;
+using Serilog;
 
 namespace OpentubeAPI.Services;
 
@@ -34,33 +35,23 @@ public class VideoService(OpentubeDBContext context) {
 
         var videoInfo = await FFProbe.AnalyseAsync(videoTempPath, cancellationToken: cancellationToken).CatchCancellation(Cleanup);
         if (videoInfo is null) return canceledError;
-        
-        var videoWidth = videoInfo.PrimaryVideoStream?.Width ?? 0;
         var videoHeight = videoInfo.PrimaryVideoStream?.Height ?? 0;
-        const string encoder = "h264_vaapi";
-        var bitrates = new[] {
-            (minheight: 2160, bitrate: 10000),
-            (minheight: 1440, bitrate: 8000),
-            (minheight: 1080, bitrate: 6000),
-            (minheight: 720, bitrate: 4000),
-            (minheight: 480, bitrate: 2000),
-            (minheight: 360, bitrate: 1000),
-        };
 
         try {
             var ffmpegArgs = FFMpegArguments
                 .FromFileInput(videoTempPath)
                 .OutputToFile(Path.Combine(outputPath, "manifest.mpd"), true, options =>
                     options
-                        .WithCustomArgument("-vaapi_device /dev/dri/renderD128")
-                        .AddBitrateArguments(videoHeight, videoWidth, bitrates)
+                        .AddBitrateArguments(videoHeight)
                         .WithCustomArgument("-map 0:a:0 -c:a aac -b:a 256k")
-                        .WithCustomArgument("-g 50 -keyint_min 50 -sc_threshold 0 -err_detect ignore_err -threads 0")
+                        .WithCustomArgument("-g 50 -keyint_min 50 -err_detect ignore_err -threads 0")
                         .WithCustomArgument("-f dash -seg_duration 5 -use_timeline 1 -use_template 1")
                         .WithCustomArgument("-adaptation_sets \"id=0,streams=v id=1,streams=a\"")
-                ).CancellableThrough(cancellationToken);
-            //TODO: rewrite to use multiple instances for each bitrate, instead of a single instance mapping over every bitrate,
-            //as it will be faster and this does not even work lol
+                ).NotifyOnProgress(progress => {
+                    Log.Information("{VideoId}: Processed {ProgressTotalSeconds} seconds out of {DurationTotalSeconds}", videoId, progress.TotalSeconds, videoInfo.Duration.TotalSeconds);
+                }).CancellableThrough(cancellationToken);
+            //Turns out it not working was a issue with ffmpeg itself and not an issue with my arguments, as ones taken
+            //directly from the ffmpeg docs didn't work either. gotta stick to the slow software encoder for now ig
             var success = await ffmpegArgs.ProcessAsynchronously();
             if (!success) {
                 Cleanup();
@@ -68,26 +59,29 @@ public class VideoService(OpentubeDBContext context) {
             }
         } 
         catch (Exception ex) {
+            if (ex is not OperationCanceledException) 
+                Log.Error(ex, "Error processing video {videoId}", videoId);
             Cleanup();
             return ex is OperationCanceledException 
                 ? canceledError 
                 : new Result(new Error("Video", "Video processing failed"));
         }
 
-        var thumbnailFilename = $"thumbnail_{videoId}.jpg";
+        var thumbnailFilename = $"thumbnail_{videoId}";
         
         if (thumbnail is not null) {
             var thumbnailExtension = Path.GetExtension(thumbnail.FileName);
-            thumbnailFilename = thumbnailFilename.Replace(".jpg", thumbnailExtension);
+            thumbnailFilename += thumbnailExtension;
             await using var thumbnailFs = new FileStream(Path.Combine(CDNService.ImagePath, thumbnailFilename), FileMode.Create);
             cancelled = await thumbnailFs.CopyToAsync(thumbnailFs, cancellationToken).CatchCancellation(Cleanup);
             if (cancelled) return canceledError;
         } else {
             try {
+                thumbnailFilename += ".png";
                 await FFMpeg.SnapshotAsync(videoTempPath, Path.Combine(CDNService.ImagePath, thumbnailFilename),
                     captureTime: videoInfo.Duration / 2);
             } catch (Exception e) {
-               await Console.Error.WriteLineAsync($"Failed to generate thumbnail: {e}"); 
+                Log.Warning(e, "Failed to generate thumbnail for {videoId}", videoId);
             }
         }
 
@@ -115,12 +109,11 @@ public class VideoService(OpentubeDBContext context) {
             await context.SaveChangesAsync(CancellationToken.None);
         }
         catch (Exception e) {
-            await Console.Error.WriteLineAsync($"Error saving video to database: {e}");
+            Log.Error(e, "Error saving video to database");
+            Cleanup();
             return new Result(new Error("Video", "Video upload failed"));
         }
-        finally {
-            Cleanup();
-        }
+        try {File.Delete(videoTempPath);} catch { /* ignored */ }
         return new Result(videoId);
 
         void Cleanup() {

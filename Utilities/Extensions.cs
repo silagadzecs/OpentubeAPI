@@ -85,18 +85,20 @@ public static class Extensions {
         return opt;
     }
 
-    public static FFMpegArgumentOptions AddBitrateArguments(
-        this FFMpegArgumentOptions opt,
-        int videoHeight,
-        int videoWidth,
-        (int minHeight, int bitrate)[] bitrates)
-    {
-        var aspectRatio = (double)videoWidth / videoHeight;
+    public static FFMpegArgumentOptions AddBitrateArguments(this FFMpegArgumentOptions opt, int videoHeight) {
+        var bitrates = new[] {
+            (minheight: 2160, bitrateKbps: 60000),
+            (minheight: 1440, bitrateKbps: 24000),
+            (minheight: 1080, bitrateKbps: 12000),
+            (minheight: 720, bitrateKbps: 6000),
+            (minheight: 480, bitrateKbps: 5000),
+            (minheight: 360, bitrateKbps: 1000),
+        };
         var i = 0;
         foreach (var (minHeight, bitrate) in bitrates) {
             opt.WithCustomArgumentIf(videoHeight >= minHeight,
-                $"""-map 0:v:0 -vf "format=nv12,hwupload,scale_vaapi=w={minHeight * aspectRatio}:h={minHeight}" """ +
-                $"-c:v:{i} h264_vaapi -quality balanced -b:v:{i} {bitrate}k ");
+                $"-map 0:v:0 -c:v:{i} libx264 -crf 20 -preset fast " +
+                $"-b:v:{i} {bitrate}k -filter:v:{i} scale=-2:{videoHeight} -r:v:{i} {(videoHeight < 1080 ? "30" : "60")} ");
             if (videoHeight < minHeight) continue;
             i++;
         }
