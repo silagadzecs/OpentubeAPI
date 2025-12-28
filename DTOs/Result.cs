@@ -26,7 +26,7 @@ public class Result {
             };
         } else {
             var errors = Errors.ToDictionary(item => item.Name, item => item.Errors);
-            return new ObjectResult(errors) {
+            return new ObjectResult( new { errors }) {
                 StatusCode = StatusCode
             };
         }

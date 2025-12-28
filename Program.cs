@@ -6,30 +6,24 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.File("./Logs/app.log", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
-try {
-    var builder = WebApplication.CreateBuilder(args);
-    builder.Host.UseSerilog();
-    builder.Configuration.CheckVariables();
-    builder.Services.AddControllers();
-    builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
-    builder.Services.ConfigureApp(builder.Configuration);
+var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
-    var app = builder.Build();
-    if (app.Environment.IsDevelopment()) {
-        app.UseSwagger();
-        app.UseSwaggerUI();
-    }
+builder.Configuration.CheckVariables();
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+builder.Services.ConfigureApp(builder.Configuration);
 
-    app.UseHttpsRedirection();
-    app.UseAuthorization();
-    app.UseRateLimiter();
-    app.MapControllers();
-    app.Run();
+var app = builder.Build();
+if (app.Environment.IsDevelopment()) {
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
-catch (Exception ex) {
-    Log.Fatal(ex, "Application failed to start");
-}
-finally {
-    Log.CloseAndFlush();
-}
+
+// app.UseHttpsRedirection();
+app.UseAuthorization();
+app.UseRateLimiter();
+app.MapControllers();
+app.Run();
+Log.CloseAndFlush();

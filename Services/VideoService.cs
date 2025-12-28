@@ -1,15 +1,16 @@
 using System.Text;
-using Castle.Components.DictionaryAdapter.Xml;
 using FFMpegCore;
+using Microsoft.EntityFrameworkCore;
 using OpentubeAPI.Data;
 using OpentubeAPI.DTOs;
 using OpentubeAPI.Models;
+using OpentubeAPI.Services.Interfaces;
 using OpentubeAPI.Utilities;
 using Serilog;
 
 namespace OpentubeAPI.Services;
 
-public class VideoService(OpentubeDBContext context) {
+public class VideoService(OpentubeDBContext context) : IVideoService {
     private static readonly string TempPath = Path.GetTempPath();
 
     public async Task<Result> Upload(IFormFile videoFile, IFormFile? thumbnail, VideoUploadDTO dto, string userId, CancellationToken cancellationToken) {
@@ -40,18 +41,24 @@ public class VideoService(OpentubeDBContext context) {
         try {
             var ffmpegArgs = FFMpegArguments
                 .FromFileInput(videoTempPath)
-                .OutputToFile(Path.Combine(outputPath, "manifest.mpd"), true, options =>
+                .OutputToFile(
+                    Path.Combine(outputPath, "manifest.mpd"),
+                    true,
+                    options =>
                     options
+                        .WithCustomArgument("-v fatal -stats") //Makes FFmpeg output only stats and fatal errors
+                        .AddVAAPIArguments()
                         .AddBitrateArguments(videoHeight)
-                        .WithCustomArgument("-map 0:a:0 -c:a aac -b:a 256k")
-                        .WithCustomArgument("-g 50 -keyint_min 50 -err_detect ignore_err -threads 0")
-                        .WithCustomArgument("-f dash -seg_duration 5 -use_timeline 1 -use_template 1")
-                        .WithCustomArgument("-adaptation_sets \"id=0,streams=v id=1,streams=a\"")
+                        .WithCustomArgument("-map 0:a? -c:a aac -b:a 256k")
+                        .AddDASHArguments()
                 ).NotifyOnProgress(progress => {
-                    Log.Information("{VideoId}: Processed {ProgressTotalSeconds} seconds out of {DurationTotalSeconds}", videoId, progress.TotalSeconds, videoInfo.Duration.TotalSeconds);
+                    Log.Information("{VideoId}: Processed {ProgressTotalSeconds} seconds out of {DurationTotalSeconds}",
+                        videoId, progress.TotalSeconds, videoInfo.Duration.TotalSeconds);
+                }).NotifyOnError(progress => {
+                    Log.Information("FFMpeg output: {progress}", progress); 
+                    //FFmpeg outputs all text to stderr as stdout is reserved for the actual files 
                 }).CancellableThrough(cancellationToken);
-            //Turns out it not working was a issue with ffmpeg itself and not an issue with my arguments, as ones taken
-            //directly from the ffmpeg docs didn't work either. gotta stick to the slow software encoder for now ig
+            Log.Information("FFMpeg running with args: {ffmpegArgs}", ffmpegArgs.Arguments);
             var success = await ffmpegArgs.ProcessAsynchronously();
             if (!success) {
                 Cleanup();
@@ -73,7 +80,7 @@ public class VideoService(OpentubeDBContext context) {
             var thumbnailExtension = Path.GetExtension(thumbnail.FileName);
             thumbnailFilename += thumbnailExtension;
             await using var thumbnailFs = new FileStream(Path.Combine(CDNService.ImagePath, thumbnailFilename), FileMode.Create);
-            cancelled = await thumbnailFs.CopyToAsync(thumbnailFs, cancellationToken).CatchCancellation(Cleanup);
+            cancelled = await thumbnail.CopyToAsync(thumbnailFs, cancellationToken).CatchCancellation(Cleanup);
             if (cancelled) return canceledError;
         } else {
             try {
@@ -113,8 +120,8 @@ public class VideoService(OpentubeDBContext context) {
             Cleanup();
             return new Result(new Error("Video", "Video upload failed"));
         }
-        try {File.Delete(videoTempPath);} catch { /* ignored */ }
-        return new Result(videoId);
+        try { File.Delete(videoTempPath);} catch { /* ignored */ }
+        return new Result(new {videoId});
 
         void Cleanup() {
             try {
@@ -122,6 +129,14 @@ public class VideoService(OpentubeDBContext context) {
                 Extensions.DeleteNonEmptyDir(outputPath);
             } catch { /* Ignored */ }
         }
+    }
+
+    public async Task<Result> GetVideos(string? userId) {
+        var videos = await context.Videos
+            .Include(v => v.VideoFile)
+            .ThenInclude(vf => vf.Owner)
+            .Where(v => v.VideoFile.Visibility == Visibility.Public || v.VideoFile.OwnerId == userId.ToGuid()).ToListAsync();
+        return new Result(videos.Select(v => new VideoDTO(v)));
     }
 
     private static string GetBase64VideoId(int length) {

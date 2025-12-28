@@ -6,6 +6,11 @@
 # dotenv files
 .env
 
+#Temporarily ignore unfinished docker files
+Dockerfile
+.dockerignore
+docker-compose*
+
 # User-specific files
 *.rsuser
 *.suo

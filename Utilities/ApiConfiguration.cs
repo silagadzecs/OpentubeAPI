@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using FFMpegCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -11,23 +12,47 @@ using Microsoft.OpenApi.Models;
 using OpentubeAPI.Data;
 using OpentubeAPI.Models;
 using OpentubeAPI.Services;
+using OpentubeAPI.Services.Interfaces;
 
 namespace OpentubeAPI.Utilities;
 
+public static class Env {
+    public static class MailConfig {
+        public const string Username = "MailConfig:Username";
+        public const string Password = "MailConfig:Password";
+        public const string SMTPServer = "MailConfig:SMTPServer";
+        public const string SMTPPort = "MailConfig:SMTPPort";
+    }
+
+    public static class JwtConfig {
+        public const string Secret = "JwtConfig:Secret";
+        public const string Issuer = "JwtConfig:Issuer";
+        public const string Audience = "JwtConfig:Audience";
+        public const string AccessHours = "JwtConfig:AccessHours";
+        public const string RefreshHours = "JwtConfig:RefreshHours";
+    }
+
+    public static class ConnectionStrings {
+        public const string Default = "ConnectionStrings:Default";
+    }
+    public const string FFMpegPath = "FFMpegPath";
+    public const string FilesDir = "FilesDir";
+}
 public static class ApiConfiguration {
     public static void CheckVariables(this IConfiguration conf) {
         List<string> variables = [
-            "MailConfig:Username",
-            "MailConfig:Password",
-            "MailConfig:SMTPServer",
-            "MailConfig:SMTPPort",
-            "JwtConfig:Secret",
-            "JwtConfig:Issuer",
-            "JwtConfig:Audience",
-            "JwtConfig:AccessHours",
-            "JwtConfig:RefreshHours",
-            "SqlServerConnectionString",
-            "FFMpegPath",
+            Env.MailConfig.Username,
+            Env.MailConfig.Password,
+            Env.MailConfig.SMTPServer,
+            Env.MailConfig.SMTPPort,
+            Env.JwtConfig.Secret,
+            Env.JwtConfig.Issuer,
+            Env.JwtConfig.Audience,
+            Env.JwtConfig.AccessHours,
+            Env.JwtConfig.RefreshHours,
+            Env.ConnectionStrings.Default,
+            Env.FFMpegPath,
+            Env.FilesDir
         ];
         List<string?> values = [];
         values.AddRange(variables.Select(conf.GetValue<string?>));
@@ -53,16 +78,19 @@ public static class ApiConfiguration {
                    .AllowAnyMethod();
             });
         });
-        
-        services.AddDbContext<OpentubeDBContext>(ob => {
-            ob.UseLazyLoadingProxies().UseSqlServer(conf["SqlServerConnectionString"]);
+        services.Configure<FormOptions>(opt => {
+            opt.MultipartBodyLengthLimit = 10_737_418_240;
         });
         
+        services.AddDbContext<OpentubeDBContext>(ob => {
+            ob.UseLazyLoadingProxies().UseNpgsql(conf[Env.ConnectionStrings.Default]);
+        });
+        
+        CDNService.SetPaths(conf[Env.FilesDir]!);
         var jwtConfig = conf.GetSection("JwtConfig").Get<JwtConfig>()!;
         var mailCreds =  conf.GetSection("MailConfig").Get<MailConfig>()!;
         services.AddDependencies(mailCreds, jwtConfig);
-        services.AddJwtAuth(jwtConfig);
-        services.AddHttpClient();
+        services.AddJwtAuth(jwtConfig); 
         services.AddSwaggerGen(setup => {
             var jwtSecurityScheme = new OpenApiSecurityScheme {
                 BearerFormat = "JWT",
@@ -92,17 +120,17 @@ public static class ApiConfiguration {
                 options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 options.QueueLimit = 10;
             }));
-        GlobalFFOptions.Configure(options => options.BinaryFolder = conf["FFMpegPath"]!);
+        GlobalFFOptions.Configure(options => options.BinaryFolder = conf[Env.FFMpegPath]!);
         return services;
     }
 
     private static void AddDependencies(this IServiceCollection services, MailConfig mailCreds, JwtConfig jwtConfig) {
-        services.AddScoped<MailConfig>(_ => mailCreds);
-        services.AddScoped<JwtConfig>(_ => jwtConfig);
+        services.AddSingleton(mailCreds);
+        services.AddSingleton(jwtConfig);
         services.AddScoped<MailService>();
-        services.AddScoped<AuthService>();
-        services.AddScoped<CDNService>();
-        services.AddScoped<VideoService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ICDNService, CDNService>();
+        services.AddScoped<IVideoService, VideoService>();
     }
 
     private static void AddJwtAuth(this IServiceCollection services, JwtConfig jwtConfig) {
@@ -123,7 +151,7 @@ public static class ApiConfiguration {
                         context.Fail("Invalid token: Missing userId ('sub' claim)");
                         return;
                     }
-                    var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
+                    var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
                     var exists = await authService.UserExistsAsync(userId);
                     var jti = context.Principal!.FindFirst(JwtRegisteredClaimNames.Jti)!.Value;
                     if (!exists) {
@@ -131,7 +159,7 @@ public static class ApiConfiguration {
                         return;
                     }
 
-                    if (!await authService.AccessTokenValid(jti)) {
+                    if (!await authService.IsAccessTokenValid(jti)) {
                         context.Fail("Invalid token");
                     }
                 }

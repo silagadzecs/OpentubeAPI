@@ -44,8 +44,8 @@ public static class Extensions {
         return toCapitalize.ToUpper()[0] + toCapitalize.Substring(1).ToLower();
     }
 
-    public static Guid ToGuid(this string id) {
-        return Guid.TryParse(id, out var guid) ? guid : Guid.Empty;
+    public static Guid ToGuid(this string? id) {
+        return Guid.TryParse(id ?? "", out var guid) ? guid : Guid.Empty;
     }
 
     public static IQueryable<T> Paginate<T>(this IQueryable<T> query, int page, int pageSize) {
@@ -85,24 +85,51 @@ public static class Extensions {
         return opt;
     }
 
+    public static FFMpegArgumentOptions AddVAAPIArguments(this FFMpegArgumentOptions opt) {
+        // opt.WithCustomArgument("-init_hw_device vaapi=vaapi0:/dev/dri/renderD128");
+        // opt.WithCustomArgument("-filter_hw_device vaapi0");
+        // opt.WithCustomArgument("-hwaccel vaapi");
+        // opt.WithCustomArgument("-hwaccel_device /dev/dri/renderD128");
+        // opt.WithCustomArgument("-hwaccel_output_format vaapi");
+        opt.WithCustomArgument("-vaapi_device /dev/dri/renderD128");
+        return opt;
+    }
+
     public static FFMpegArgumentOptions AddBitrateArguments(this FFMpegArgumentOptions opt, int videoHeight) {
-        var bitrates = new[] {
-            (minheight: 2160, bitrateKbps: 60000),
-            (minheight: 1440, bitrateKbps: 24000),
-            (minheight: 1080, bitrateKbps: 12000),
-            (minheight: 720, bitrateKbps: 6000),
-            (minheight: 480, bitrateKbps: 5000),
-            (minheight: 360, bitrateKbps: 1000),
-        };
-        var i = 0;
-        foreach (var (minHeight, bitrate) in bitrates) {
-            opt.WithCustomArgumentIf(videoHeight >= minHeight,
-                $"-map 0:v:0 -c:v:{i} libx264 -crf 20 -preset fast " +
-                $"-b:v:{i} {bitrate}k -filter:v:{i} scale=-2:{videoHeight} -r:v:{i} {(videoHeight < 1080 ? "30" : "60")} ");
-            if (videoHeight < minHeight) continue;
-            i++;
+        var resolutions = new[] { 2160, 1440, 1080, 720, 480, 360, 240, 144 };
+        resolutions = resolutions.Where(res => videoHeight >= res).ToArray();
+        if (resolutions.Length == 0) return opt;
+        var filterArgument =
+            $"-filter_complex \"[0:v]split={resolutions.Length}{string.Join("", resolutions.Select(WrapResWithBrackets))};";
+        foreach (var res in resolutions) {
+            filterArgument +=
+                $"{WrapResWithBrackets(res)}scale=w=-2:h={res}:flags=bicublin,format=nv12,hwupload{WrapStrWithBrackets(res + "out")}" +
+                $"{(res == resolutions.Last() ? '"' : ';')}";
         }
 
+        opt.WithCustomArgument(filterArgument);
+        foreach (var res in resolutions) {
+            opt.WithCustomArgument(
+                $"-map {WrapStrWithBrackets(res + "out")} -c:v h264_vaapi -qp 20 -g 48 -keyint_min 48");
+        }
+
+        return opt;
+
+        string WrapResWithBrackets(int res) {
+            return $"[{res}]";
+        }
+
+        string WrapStrWithBrackets(string str) {
+            return $"[{str}]";
+        }
+    }
+
+    public static FFMpegArgumentOptions AddDASHArguments(this FFMpegArgumentOptions opt) {
+        opt.WithCustomArgument("-f dash");
+        opt.WithCustomArgument("-seg_duration 2");
+        opt.WithCustomArgument("-use_timeline 1");
+        opt.WithCustomArgument("-use_template 1");
+        opt.WithCustomArgument("-adaptation_sets \"id=0,streams=v id=1,streams=a\"");
         return opt;
     }
 

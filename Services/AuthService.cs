@@ -1,18 +1,20 @@
 ﻿using System.Security.Cryptography;
+using System.Text;
 using Isopoh.Cryptography.Argon2;
 using Microsoft.EntityFrameworkCore;
 using OpentubeAPI.Data;
 using OpentubeAPI.DTOs;
 using OpentubeAPI.Models;
+using OpentubeAPI.Services.Interfaces;
 using OpentubeAPI.Utilities;
 using UAParser;
 
 namespace OpentubeAPI.Services;
 
-public class AuthService(OpentubeDBContext context, MailService mailService, JwtConfig jwtConfig) {
+public class AuthService(OpentubeDBContext context, MailService mailService, JwtConfig jwtConfig) : IAuthService {
     public async Task<Result> GetSelf(string userId) {
         var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId.ToGuid());
-        return new Result(new UserDTO(user!));
+        return new Result(new UserDTO(user!)); //User cannot be null as them existing was checked during the JWT verification
     }
     public async Task<Result> Register(RegisterDTO dto, IFormFile? profilePicture) {
         dto.Email = dto.Email.Trim().ToLower();
@@ -132,6 +134,7 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         if (!user.Verified) return new Result(new Error("Email", "Email not verified."));
         if (!Argon2.Verify(user.PasswordHash, dto.Password)) return credsError;
         var ip = httpContext.Connection.RemoteIpAddress?.ToString();
+        if (ip != null && ip.StartsWith("::ffff:")) ip = ip.Replace("::ffff:", "");
         user.LastLogin = DateTimeOffset.UtcNow;
         user.LastLoginIP = ip;
         var uaInfo = Parser.GetDefault().Parse(httpContext.Request.Headers.UserAgent.ToString());
@@ -171,17 +174,49 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         });
     }
 
+    public async Task<Result> DeleteRefreshTokens(List<string> refreshTokenIds, string userId) {
+        var refreshTokens = await context.UserRefreshTokens.Where(rt => rt.UserId == userId.ToGuid()).ToListAsync();
+        var tokensToRemove = refreshTokens
+            .Where(rt => refreshTokenIds.Contains(GetRefreshTokenId(rt.UserId, rt.RefreshToken))).ToList();
+        context.UserRefreshTokens.RemoveRange(tokensToRemove);
+        await context.SaveChangesAsync();
+        return new Result(new {
+            message = $"Removed {tokensToRemove.Count} tokens",
+            removed = tokensToRemove.Count
+        });
+    }
+
+    public async Task<Result> GetLoggedInDevices(string userId) {
+        var refreshTokens = await context.UserRefreshTokens
+            .Where(urt => urt.UserId == userId.ToGuid())
+            .OrderByDescending(urt => urt.Created)
+            .ToListAsync();
+        return new Result(refreshTokens.Select(rt => new {
+            id = GetRefreshTokenId(rt.UserId, rt.RefreshToken),
+            rt.DeviceInfo,
+            rt.DeviceIp,
+            rt.Created
+        }));
+    }
+    
     public async Task<bool> UserExistsAsync(string userId) {
         return (await context.Users.FindAsync(userId.ToGuid())) is not null;
     }
 
-    public async Task<bool> AccessTokenValid(string jti) {
+    public async Task<bool> IsAccessTokenValid(string jti) {
         var refreshToken = await context.UserRefreshTokens.FirstOrDefaultAsync(urt => 
             urt.AccessJti == jti);
         if (refreshToken is null) return false;
         return DateTimeOffset.UtcNow - refreshToken.Created < TimeSpan.FromHours(jwtConfig.AccessHours);
     }
 
+    private static string GetRefreshTokenId(Guid userId, string refreshToken) {
+        var rtSize = Encoding.UTF8.GetByteCount(refreshToken);
+        Span<byte> buffer = stackalloc byte[16 + rtSize];
+        userId.TryWriteBytes(buffer);
+        Encoding.UTF8.GetBytes(refreshToken, buffer);
+        return Convert.ToHexString(SHA256.HashData(buffer)).ToLower();
+    }
     private string AddRefreshToken(Guid userId, string deviceInfo, string ip, string jti) {
         var refreshToken = RandomNumberGenerator.GetHexString(64, true);
         var refreshTokenEntry = new UserRefreshToken {

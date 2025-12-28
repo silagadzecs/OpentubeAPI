@@ -2,14 +2,31 @@ using Microsoft.EntityFrameworkCore;
 using OpentubeAPI.Data;
 using OpentubeAPI.DTOs;
 using OpentubeAPI.Models;
+using OpentubeAPI.Services.Interfaces;
 using OpentubeAPI.Utilities;
 
 namespace OpentubeAPI.Services;
 
-public class CDNService(OpentubeDBContext context) {
-    private const string BasePath = "./Files";
-    public static readonly string ImagePath = Path.Combine(BasePath, "Images");
-    public static readonly string VideoPath = Path.Combine(BasePath, "Videos");
+public class CDNService(OpentubeDBContext context) : ICDNService {
+    private static string? _imagePath;
+    private static string? _videoPath;
+
+    public static string ImagePath {
+        get => _imagePath ?? throw new Exception("Tried to get CDN image path before initialization");
+        private set => _imagePath = value;
+    }
+
+    public static string VideoPath {
+        get => _videoPath ?? throw new Exception("Tried to get CDN video path before initialization");
+        private set => _videoPath = value;
+    }
+
+    public static void SetPaths(string basePath) {
+        ImagePath =  Path.Combine(basePath, "Images");
+        VideoPath =  Path.Combine(basePath, "Videos");
+        Directory.CreateDirectory(ImagePath);
+        Directory.CreateDirectory(VideoPath);
+    }
     
     private static readonly Result NotFoundError = new(new Error("Filename", "File not found")) {
         StatusCode = 404
@@ -31,11 +48,11 @@ public class CDNService(OpentubeDBContext context) {
     }
 
     public async Task<Result> GetVideoFile(string videoId, string filename, string? userId) {
-        var video = await context.MediaFiles.FirstOrDefaultAsync(mf => mf.Filename == filename);
+        var video = await context.MediaFiles.FirstOrDefaultAsync(mf => mf.Filename == videoId);
         if (video is null) {
             return NotFoundError;
         }
-
+        
         if (video.Visibility is Visibility.Private && (userId ?? string.Empty).ToGuid() != video.OwnerId) {
             return ForbiddenError;
         }

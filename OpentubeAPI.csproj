@@ -17,7 +17,6 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" Version="8.0.20" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.20" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.20">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -25,6 +24,7 @@
         <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.7" />
         <PackageReference Include="Mime-Detective" Version="25.8.1" />
         <PackageReference Include="Mime-Detective.Definitions.Condensed" Version="25.8.1" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
         <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
         <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
@@ -36,4 +36,24 @@
       <Folder Include="Files\" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Compile Remove="Tests\**" />
+      <EmbeddedResource Remove="Tests\**" />
+      <Content Remove="Tests\**" />
+      <None Remove="Tests\**" />
+      <_ContentIncludedByDefault Remove="Tests\obj\project.assets.json" />
+      <_ContentIncludedByDefault Remove="Tests\obj\project.packagespec.json" />
+      <_ContentIncludedByDefault Remove="Tests\obj\Tests.csproj.nuget.dgspec.json" />
+    </ItemGroup>
+    
+    <ItemGroup>
+      <Compile Remove="Migrations.old\**" />
+      <EmbeddedResource Remove="Migrations.old\**" />
+      <Content Remove="Migrations.old\**" />
+      <None Remove="Migrations.old\**" />
+      <_ContentIncludedByDefault Remove="Migrations.old\obj\project.assets.json" />
+      <_ContentIncludedByDefault Remove="Migrations.old\obj\project.packagespec.json" />
+      <_ContentIncludedByDefault Remove="Migrations.old\obj\Tests.csproj.nuget.dgspec.json" />
+    </ItemGroup>
+    
 </Project>

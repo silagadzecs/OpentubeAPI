@@ -4,12 +4,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpentubeAPI.DTOs;
 using OpentubeAPI.Services;
+using OpentubeAPI.Services.Interfaces;
 
 namespace OpentubeAPI.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(AuthService authService) : ControllerBase {
+public class AuthController(IAuthService authService) : ControllerBase {
     private string? UserId => User.FindFirstValue(ClaimTypes.NameIdentifier);
     
     [HttpGet]
@@ -44,7 +45,20 @@ public class AuthController(AuthService authService) : ControllerBase {
 
     [HttpPost("refresh")]
     [Produces("application/json")]
-    public async Task<IActionResult> Refresh(string token, string userId) {
-        return (await authService.RefreshTokens(token, userId)).ToActionResult();
+    public async Task<IActionResult> Refresh(string refreshToken, string userId) {
+        return (await authService.RefreshTokens(refreshToken, userId)).ToActionResult();
     }
+
+    [Authorize]
+    [HttpGet("loggedin-devices")]
+    public async Task<IActionResult> GetLoggedInDevices() {
+        return (await authService.GetLoggedInDevices(UserId!)).ToActionResult();
+    }
+
+    [Authorize]
+    [HttpPost("logout-devices")]
+    public async Task<IActionResult> LogoutDevices(List<string> refreshTokenIds) {
+        return (await authService.DeleteRefreshTokens(refreshTokenIds, UserId!)).ToActionResult();
+    }
+    
 }

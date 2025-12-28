@@ -1,15 +1,15 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpentubeAPI.DTOs;
-using OpentubeAPI.Services;
+using OpentubeAPI.Services.Interfaces;
 
 namespace OpentubeAPI.Controllers {
     [ApiController]
-    [Route("api/video")]
-    public class VideoController(VideoService videoService) : ControllerBase {
-        private string? UserId => User.FindFirstValue(ClaimTypes.NameIdentifier); 
+    [Route("api/videos")]
+    public class VideoController(IVideoService videoService) : ControllerBase {
+        private bool IsAuthenticated => User.Identity?.IsAuthenticated ?? false;
+        private string? UserId => !IsAuthenticated ? null : User.FindFirstValue(ClaimTypes.NameIdentifier); 
         
         [Authorize]
         [HttpPost("upload")]
@@ -17,6 +17,11 @@ namespace OpentubeAPI.Controllers {
         [Produces("application/json")]
         public async Task<IActionResult> Upload(IFormFile videoFile, IFormFile? thumbnail, [FromForm] VideoUploadDTO dto) {
             return (await videoService.Upload(videoFile, thumbnail, dto, UserId!, HttpContext.RequestAborted)).ToActionResult();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetVideos() {
+            return (await videoService.GetVideos(UserId)).ToActionResult();
         }
     }
 }
