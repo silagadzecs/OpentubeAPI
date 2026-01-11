@@ -130,7 +130,7 @@ public static class Extensions {
         opt.WithCustomArgument("-seg_duration 2");
         opt.WithCustomArgument("-use_timeline 1");
         opt.WithCustomArgument("-use_template 1");
-        opt.WithCustomArgument("-adaptation_sets \"id=0,streams=v id=1,streams=a id=2,streams=s\"");
+        opt.WithCustomArgument("-adaptation_sets \"id=0,streams=v id=1,streams=a\"");
         return opt;
     }
 

@@ -57,7 +57,6 @@ public class VideoService(OpentubeDBContext context) : IVideoService {
                         .AddVAAPIArguments()
                         .AddBitrateArguments(videoHeight)
                         .WithCustomArgument("-map 0:a? -c:a aac -b:a 256k")
-                        .WithCustomArgument("-map 0:s? -c:s webvtt")
                         .AddDASHArguments()
                 ).NotifyOnProgress(progress => {
                     FFMpegLogger.Information("{VideoId}: Processed {ProgressTotalSeconds} seconds out of {DurationTotalSeconds}",
