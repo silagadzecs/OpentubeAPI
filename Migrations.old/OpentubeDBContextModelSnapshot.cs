@@ -27,17 +27,12 @@ namespace OpentubeAPI.Migrations
 
             modelBuilder.Entity("OpentubeAPI.Models.MediaFile", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.Property<string>("Filename")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<byte>("FileType")
                         .HasColumnType("smallint");
-
-                    b.Property<string>("Filename")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
 
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uuid");
@@ -45,7 +40,7 @@ namespace OpentubeAPI.Migrations
                     b.Property<byte>("Visibility")
                         .HasColumnType("smallint");
 
-                    b.HasKey("Id");
+                    b.HasKey("Filename");
 
                     b.HasIndex("Filename")
                         .IsUnique();
@@ -79,13 +74,6 @@ namespace OpentubeAPI.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
-
-                    b.Property<DateTimeOffset?>("LastLogin")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LastLoginIP")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -174,11 +162,9 @@ namespace OpentubeAPI.Migrations
 
             modelBuilder.Entity("OpentubeAPI.Models.Video", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("VideoFileId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("Id")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -195,9 +181,7 @@ namespace OpentubeAPI.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.HasKey("Id", "VideoFileId");
-
-                    b.HasIndex("VideoFileId");
+                    b.HasKey("Id");
 
                     b.ToTable("Videos");
                 });
@@ -228,7 +212,7 @@ namespace OpentubeAPI.Migrations
                 {
                     b.HasOne("OpentubeAPI.Models.MediaFile", "VideoFile")
                         .WithMany()
-                        .HasForeignKey("VideoFileId")
+                        .HasForeignKey("Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

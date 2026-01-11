@@ -4,14 +4,15 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace OpentubeAPI.Models;
 
 public class Video {
-    public Guid Id { get; init; } = Guid.NewGuid();
-    public required Guid VideoFileId { get; init; }
+    [Key, MaxLength(256)]
+    public required string Id { get; init; }
     [MaxLength(100)]
-    public required string Title { get; init; }
+    public required string Title { get; set; }
     [MaxLength(2500)]
-    public required string Description { get; init; }
+    public required string Description { get; set; }
     [MaxLength(256)]
-    public required string ThumbnailFilename { get; init; }
+    public required string ThumbnailFilename { get; set; }
     
+    [ForeignKey(nameof(Id))]
     public virtual MediaFile VideoFile { get; init; } = null!;
 }

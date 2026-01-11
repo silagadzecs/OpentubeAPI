@@ -7,31 +7,38 @@ using OpentubeAPI.Models;
 using OpentubeAPI.Services.Interfaces;
 using OpentubeAPI.Utilities;
 using Serilog;
+using Serilog.Core;
+using ILogger = Serilog.ILogger;
 
 namespace OpentubeAPI.Services;
 
 public class VideoService(OpentubeDBContext context) : IVideoService {
-    private static readonly string TempPath = Path.GetTempPath();
+    private static readonly string TempPath = Environment.GetEnvironmentVariable("ASPNETCORE_TEMP") ?? Path.GetTempPath();
+    private static readonly ILogger FFMpegLogger = Log.ForContext(Constants.SourceContextPropertyName, "FFMpegOut");
 
-    public async Task<Result> Upload(IFormFile videoFile, IFormFile? thumbnail, VideoUploadDTO dto, string userId, CancellationToken cancellationToken) {
+    public async Task<Result> Upload(VideoUploadDTO dto, string userId, CancellationToken cancellationToken) {
         var canceledError = new Result(new Error("Cancelled", "The HTTP Request was cancelled"));
         
-        if (!videoFile.OpenReadStream().GetMimeType().StartsWith("video/")) {
+        if (!dto.Video.OpenReadStream().GetMimeType().StartsWith("video/")) {
             return new Result(new Error("Video", "Invalid video file"));
         }
         
-        if (thumbnail is not null && !thumbnail.OpenReadStream().GetMimeType().StartsWith("image/")) {
+        if (dto.Thumbnail is not null && !dto.Thumbnail.OpenReadStream().GetMimeType().StartsWith("image/")) {
             return new Result(new Error("Thumbnail", "Invalid thumbnail file"));
         }
 
-        var videoTempPath = Path.Combine(TempPath, videoFile.FileName);
+        var videoTempPath = Path.Combine(TempPath, dto.Video.FileName);
         await using var videoFs = new FileStream(videoTempPath, FileMode.Create);
         
-        var cancelled = await videoFile.CopyToAsync(videoFs, cancellationToken).CatchCancellation(() => File.Delete(videoTempPath));
+        var cancelled = await dto.Video.CopyToAsync(videoFs, cancellationToken).CatchCancellation(() => File.Delete(videoTempPath));
         if (cancelled) return canceledError;
         
         var videoId = GetBase64VideoId(11);
         var outputPath = Path.Combine(CDNService.VideoPath, videoId);
+        while (Directory.Exists(outputPath)) {
+            videoId = GetBase64VideoId(11);
+            outputPath = Path.Combine(CDNService.VideoPath, videoId);
+        }
         Directory.CreateDirectory(outputPath);
 
         var videoInfo = await FFProbe.AnalyseAsync(videoTempPath, cancellationToken: cancellationToken).CatchCancellation(Cleanup);
@@ -50,12 +57,13 @@ public class VideoService(OpentubeDBContext context) : IVideoService {
                         .AddVAAPIArguments()
                         .AddBitrateArguments(videoHeight)
                         .WithCustomArgument("-map 0:a? -c:a aac -b:a 256k")
+                        .WithCustomArgument("-map 0:s? -c:s webvtt")
                         .AddDASHArguments()
                 ).NotifyOnProgress(progress => {
-                    Log.Information("{VideoId}: Processed {ProgressTotalSeconds} seconds out of {DurationTotalSeconds}",
+                    FFMpegLogger.Information("{VideoId}: Processed {ProgressTotalSeconds} seconds out of {DurationTotalSeconds}",
                         videoId, progress.TotalSeconds, videoInfo.Duration.TotalSeconds);
                 }).NotifyOnError(progress => {
-                    Log.Information("FFMpeg output: {progress}", progress); 
+                    FFMpegLogger.Information("FFMpeg output: {progress}", progress); 
                     //FFmpeg outputs all text to stderr as stdout is reserved for the actual files 
                 }).CancellableThrough(cancellationToken);
             Log.Information("FFMpeg running with args: {ffmpegArgs}", ffmpegArgs.Arguments);
@@ -76,11 +84,11 @@ public class VideoService(OpentubeDBContext context) : IVideoService {
 
         var thumbnailFilename = $"thumbnail_{videoId}";
         
-        if (thumbnail is not null) {
-            var thumbnailExtension = Path.GetExtension(thumbnail.FileName);
+        if (dto.Thumbnail is not null) {
+            var thumbnailExtension = Path.GetExtension(dto.Thumbnail.FileName).ToLower();
             thumbnailFilename += thumbnailExtension;
             await using var thumbnailFs = new FileStream(Path.Combine(CDNService.ImagePath, thumbnailFilename), FileMode.Create);
-            cancelled = await thumbnail.CopyToAsync(thumbnailFs, cancellationToken).CatchCancellation(Cleanup);
+            cancelled = await dto.Thumbnail.CopyToAsync(thumbnailFs, cancellationToken).CatchCancellation(Cleanup);
             if (cancelled) return canceledError;
         } else {
             try {
@@ -108,10 +116,10 @@ public class VideoService(OpentubeDBContext context) : IVideoService {
             await context.MediaFiles.AddAsync(thumbnailMediaFile, CancellationToken.None);
             await context.MediaFiles.AddAsync(videoMediaFile, CancellationToken.None);
             await context.Videos.AddAsync(new Video {
+                Id = videoMediaFile.Filename,
                 Title = dto.Title,
                 Description = dto.Description,
                 ThumbnailFilename = thumbnailFilename,
-                VideoFileId = videoMediaFile.Id
             }, CancellationToken.None);
             await context.SaveChangesAsync(CancellationToken.None);
         }
@@ -137,6 +145,87 @@ public class VideoService(OpentubeDBContext context) : IVideoService {
             .ThenInclude(vf => vf.Owner)
             .Where(v => v.VideoFile.Visibility == Visibility.Public || v.VideoFile.OwnerId == userId.ToGuid()).ToListAsync();
         return new Result(videos.Select(v => new VideoDTO(v)));
+    }
+
+    public async Task<Result> GetVideo(string videoId, string? userId) {
+        var video = await context.Videos
+            .Include(v => v.VideoFile)
+            .ThenInclude(vf => vf.Owner)
+            .FirstOrDefaultAsync(v => v.Id == videoId && 
+                (v.VideoFile.Visibility == Visibility.Public || v.VideoFile.OwnerId == userId.ToGuid()));
+        return video is not null ? new Result(new VideoDTO(video)) : new Result(new Error("videoId", "Video not found"));
+    }
+
+    public async Task<Result> DeleteVideo(string videoId, string userId) {
+        var video = await context.Videos
+            .Include(v => v.VideoFile)
+            .FirstOrDefaultAsync(v => v.Id == videoId);
+        if (video is null) return new Result(new Error("videoId", "Video not found")) {
+            StatusCode = 404
+        };
+        if (video.VideoFile.OwnerId != userId.ToGuid()) return new Result(new Error("User", "Forbidden")) {
+            StatusCode = 403
+        };
+
+        try {
+            Extensions.DeleteNonEmptyDir(Path.Combine(CDNService.VideoPath, videoId));
+        }
+        catch {
+            // ignored
+        }
+        finally {
+            context.MediaFiles.Remove(video.VideoFile);
+            await context.SaveChangesAsync();
+        }
+        return new Result($"Successfully deleted {videoId}");
+    }
+
+    public async Task<Result> EditVideo(string videoId, VideoEditDTO dto, string userId) {
+        if (dto.Thumbnail is not null && !dto.Thumbnail.OpenReadStream().GetMimeType().StartsWith("image/")) {
+            return new Result(new Error("Thumbnail", "Invalid thumbnail file"));
+        }
+        var video = await context.Videos
+            .Include(v => v.VideoFile)
+            .FirstOrDefaultAsync(v => v.Id == videoId);
+        if (video is null) return new Result(new Error("videoId", "Video not found")) {
+            StatusCode = 404
+        };
+        if (video.VideoFile.OwnerId != userId.ToGuid()) return new Result(new Error("User", "Forbidden")) {
+            StatusCode = 403
+        };
+        var thumbnailFilename = "";
+        if (dto.Thumbnail is not null) {
+            var thumbnailExtension = Path.GetExtension(dto.Thumbnail.FileName).ToLower();
+            thumbnailFilename = $"thumbnail_{videoId}.{thumbnailExtension}";
+            var oldNameIsEqualToNew = thumbnailFilename == video.ThumbnailFilename;
+            var thumbnailPath = Path.Combine(CDNService.ImagePath, thumbnailFilename);
+            try {
+                await using var fs = new FileStream(thumbnailPath, FileMode.Create);
+                await dto.Thumbnail.CopyToAsync(fs);
+            }
+            catch (Exception e) {
+                Log.Error(e, "Error changing thumbnail for video {id}", videoId);
+                return new Result(new Error("Thumbnail", "Unable to change thumbnail for video")) {
+                    StatusCode = 500
+                };
+            }
+            
+            if(!oldNameIsEqualToNew)
+                try {
+                    File.Delete(Path.Combine(CDNService.ImagePath, video.ThumbnailFilename));
+                }
+                catch {
+                    // ignored
+                }
+        }
+
+        video.Title = dto.Title;
+        video.Description = dto.Description;
+        video.VideoFile.Visibility = dto.Visibility;
+        video.ThumbnailFilename = thumbnailFilename;
+        await context.SaveChangesAsync();
+        return new Result("Successfully updated video");
+
     }
 
     private static string GetBase64VideoId(int length) {

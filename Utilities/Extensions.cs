@@ -73,9 +73,10 @@ public static class Extensions {
         }.Build();
         if (!file.CanSeek) throw new InvalidOperationException("Cannot seek stream.");
         file.Position = 0;
-        var fileBytes = new byte[file.Length];
+        var fileBytes = new byte[Math.Min(file.Length, 4096)];
         file.ReadExactly(fileBytes, 0, fileBytes.Length);
         var result = inspector.Inspect(fileBytes).OrderByDescending(res => res.Points).FirstOrDefault();
+        file.Position = 0;
         return result?.Definition.File.MimeType?.ToLower() ?? "application/octet-stream";
     }
 
@@ -129,7 +130,7 @@ public static class Extensions {
         opt.WithCustomArgument("-seg_duration 2");
         opt.WithCustomArgument("-use_timeline 1");
         opt.WithCustomArgument("-use_template 1");
-        opt.WithCustomArgument("-adaptation_sets \"id=0,streams=v id=1,streams=a\"");
+        opt.WithCustomArgument("-adaptation_sets \"id=0,streams=v id=1,streams=a id=2,streams=s\"");
         return opt;
     }
 

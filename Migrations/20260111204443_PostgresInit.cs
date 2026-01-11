@@ -21,12 +21,10 @@ namespace OpentubeAPI.Migrations
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     PasswordHash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     ProfilePicture = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    LastLoginIP = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     Verified = table.Column<bool>(type: "boolean", nullable: false),
                     DeletionRequested = table.Column<bool>(type: "boolean", nullable: false),
                     Active = table.Column<bool>(type: "boolean", nullable: false),
                     CreationDate = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    LastLogin = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     Role = table.Column<byte>(type: "smallint", nullable: false)
                 },
                 constraints: table =>
@@ -51,7 +49,6 @@ namespace OpentubeAPI.Migrations
                 name: "MediaFiles",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Filename = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     FileType = table.Column<byte>(type: "smallint", nullable: false),
                     OwnerId = table.Column<Guid>(type: "uuid", nullable: false),
@@ -59,7 +56,7 @@ namespace OpentubeAPI.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_MediaFiles", x => x.Id);
+                    table.PrimaryKey("PK_MediaFiles", x => x.Filename);
                     table.ForeignKey(
                         name: "FK_MediaFiles_Users_OwnerId",
                         column: x => x.OwnerId,
@@ -94,20 +91,19 @@ namespace OpentubeAPI.Migrations
                 name: "Videos",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    VideoFileId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     Title = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Description = table.Column<string>(type: "character varying(2500)", maxLength: 2500, nullable: false),
                     ThumbnailFilename = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Videos", x => new { x.Id, x.VideoFileId });
+                    table.PrimaryKey("PK_Videos", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Videos_MediaFiles_VideoFileId",
-                        column: x => x.VideoFileId,
+                        name: "FK_Videos_MediaFiles_Id",
+                        column: x => x.Id,
                         principalTable: "MediaFiles",
-                        principalColumn: "Id",
+                        principalColumn: "Filename",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -139,11 +135,6 @@ namespace OpentubeAPI.Migrations
                 table: "Users",
                 column: "Username",
                 unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Videos_VideoFileId",
-                table: "Videos",
-                column: "VideoFileId");
         }
 
         /// <inheritdoc />

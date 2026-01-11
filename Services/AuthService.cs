@@ -21,7 +21,7 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         dto.Username = dto.Username.Trim().ToLower();
         var emailUser = await context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
         if (emailUser is not null) {
-            if (emailUser is { Verified: false, LastLogin: null } &&
+            if (emailUser is { Verified: false, Active: false} &&
                 DateTimeOffset.UtcNow - emailUser.CreationDate >= TimeSpan.FromDays(30)) {
                 context.Users.Remove(emailUser);
             } else {
@@ -31,7 +31,7 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
 
         var usernameUser = await context.Users.FirstOrDefaultAsync(u => u.Username == dto.Username);
         if (usernameUser is not null) {
-            if (usernameUser is { Verified: false, LastLogin: null } &&
+            if (usernameUser is { Verified: false, Active: false } &&
                 DateTimeOffset.UtcNow - usernameUser.CreationDate >= TimeSpan.FromDays(30)) {
                 context.Users.Remove(usernameUser);
             } else {
@@ -133,10 +133,9 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         if (user is null) return credsError;
         if (!user.Verified) return new Result(new Error("Email", "Email not verified."));
         if (!Argon2.Verify(user.PasswordHash, dto.Password)) return credsError;
+        if (!user.Active) user.Active = true;
         var ip = httpContext.Connection.RemoteIpAddress?.ToString();
         if (ip != null && ip.StartsWith("::ffff:")) ip = ip.Replace("::ffff:", "");
-        user.LastLogin = DateTimeOffset.UtcNow;
-        user.LastLoginIP = ip;
         var uaInfo = Parser.GetDefault().Parse(httpContext.Request.Headers.UserAgent.ToString());
         var deviceInfo = $"{uaInfo.UA.Family} on {uaInfo.OS.Family} (Device: {uaInfo.Device.Family})";
         var (accessToken, jti) = user.GenerateAccessToken(jwtConfig);

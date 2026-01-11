@@ -15,12 +15,10 @@ public class User {
     [MaxLength(256)] public required string Email { get; init; }
     [MaxLength(256)] public required string PasswordHash { get; init; }
     [MaxLength(256)] public string ProfilePicture { get; set; } = string.Empty;  
-    [MaxLength(50)] public string? LastLoginIP { get; set; }
     public bool Verified { get; set; }
     public bool DeletionRequested { get; init; }
-    public bool Active { get; init; } = true;
+    public bool Active { get; set; }
     public DateTimeOffset CreationDate { get; init; } = DateTimeOffset.UtcNow;
-    public DateTimeOffset? LastLogin { get; set; }
     public UserRole Role { get; init; } = UserRole.User;
     
     public (string Token, string Jti) GenerateAccessToken(JwtConfig config) {

@@ -7,7 +7,6 @@ namespace OpentubeAPI.Models;
 public class UserRefreshToken {
     [MaxLength(128)]
     public required string RefreshToken { get; init; }
-    public Guid UserId { get; init; }
     
     [MaxLength(128)]
     public string DeviceInfo { get; init; } = "Unknown";
@@ -19,6 +18,8 @@ public class UserRefreshToken {
     public required string AccessJti { get; init; }
     
     public DateTimeOffset Created { get; init; } = DateTimeOffset.UtcNow;
+    
+    public Guid UserId { get; init; }
     //Nav Props
     public virtual User User { get; init; } = null!;
 }

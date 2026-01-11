@@ -20,9 +20,5 @@ public class OpentubeDBContext(DbContextOptions options) : DbContext(options) {
             ut.UserId,
             ut.RefreshToken
         });
-        modelBuilder.Entity<Video>().HasKey(v => new {
-            v.Id,
-            v.VideoFileId
-        });
     }
 }

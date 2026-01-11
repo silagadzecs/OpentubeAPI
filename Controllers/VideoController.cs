@@ -11,17 +11,35 @@ namespace OpentubeAPI.Controllers {
         private bool IsAuthenticated => User.Identity?.IsAuthenticated ?? false;
         private string? UserId => !IsAuthenticated ? null : User.FindFirstValue(ClaimTypes.NameIdentifier); 
         
-        [Authorize]
-        [HttpPost("upload")]
-        [RequestSizeLimit(10_737_418_240)] //10 GiB
-        [Produces("application/json")]
-        public async Task<IActionResult> Upload(IFormFile videoFile, IFormFile? thumbnail, [FromForm] VideoUploadDTO dto) {
-            return (await videoService.Upload(videoFile, thumbnail, dto, UserId!, HttpContext.RequestAborted)).ToActionResult();
-        }
-
         [HttpGet]
         public async Task<IActionResult> GetVideos() {
             return (await videoService.GetVideos(UserId)).ToActionResult();
         }
+        
+        [HttpGet("{videoId}")]
+        public async Task<IActionResult> GetVideo(string videoId) {
+            return (await videoService.GetVideo(videoId, UserId)).ToActionResult();
+        }
+        
+        [Authorize]
+        [HttpPost("upload")]
+        [RequestSizeLimit(10_737_418_240)] //10 GiB
+        [Produces("application/json")]
+        public async Task<IActionResult> Upload(VideoUploadDTO dto) {
+            return (await videoService.Upload(dto, UserId!, HttpContext.RequestAborted)).ToActionResult();
+        }
+        
+        [Authorize]
+        [HttpPut("{videoId}")]
+        public async Task<IActionResult> EditVideo(string videoId, VideoEditDTO dto) {
+            return (await videoService.EditVideo(videoId, dto, UserId!)).ToActionResult();
+        }
+        
+        [Authorize]
+        [HttpDelete("{videoId}")]
+        public async Task<IActionResult> DeleteVideo(string videoId) {
+            return (await videoService.DeleteVideo(videoId, UserId!)).ToActionResult();
+        }
+
     }
 }

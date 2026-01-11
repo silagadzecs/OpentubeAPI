@@ -5,12 +5,11 @@ namespace OpentubeAPI.Models;
 
 [Index(nameof(Filename), IsUnique = true)]
 public class MediaFile {
-    public Guid Id { get; init; } = Guid.NewGuid();
-    [MaxLength(256)]
+    [Key, MaxLength(256)] 
     public required string Filename { get; init; }
     public required FileType FileType { get; init; }
     public required Guid OwnerId { get; init; }
-    public required Visibility Visibility { get; init; }
+    public required Visibility Visibility { get; set; }
     
     public virtual User Owner { get; init; } = null!;
 }

@@ -16,7 +16,7 @@ using OpentubeAPI.Services.Interfaces;
 
 namespace OpentubeAPI.Utilities;
 
-public static class Env {
+public static class EnvKeys {
     public static class MailConfig {
         public const string Username = "MailConfig:Username";
         public const string Password = "MailConfig:Password";
@@ -41,18 +41,18 @@ public static class Env {
 public static class ApiConfiguration {
     public static void CheckVariables(this IConfiguration conf) {
         List<string> variables = [
-            Env.MailConfig.Username,
-            Env.MailConfig.Password,
-            Env.MailConfig.SMTPServer,
-            Env.MailConfig.SMTPPort,
-            Env.JwtConfig.Secret,
-            Env.JwtConfig.Issuer,
-            Env.JwtConfig.Audience,
-            Env.JwtConfig.AccessHours,
-            Env.JwtConfig.RefreshHours,
-            Env.ConnectionStrings.Default,
-            Env.FFMpegPath,
-            Env.FilesDir
+            EnvKeys.MailConfig.Username,
+            EnvKeys.MailConfig.Password,
+            EnvKeys.MailConfig.SMTPServer,
+            EnvKeys.MailConfig.SMTPPort,
+            EnvKeys.JwtConfig.Secret,
+            EnvKeys.JwtConfig.Issuer,
+            EnvKeys.JwtConfig.Audience,
+            EnvKeys.JwtConfig.AccessHours,
+            EnvKeys.JwtConfig.RefreshHours,
+            EnvKeys.ConnectionStrings.Default,
+            EnvKeys.FFMpegPath,
+            EnvKeys.FilesDir
         ];
         List<string?> values = [];
         values.AddRange(variables.Select(conf.GetValue<string?>));
@@ -61,8 +61,6 @@ public static class ApiConfiguration {
         Console.WriteLine($"Environment Variables: {variables.ToCSVColumn()}" +
                           $"  need to be set in order for this app to function.\n" +
                           $"You are missing: {variables.Where((_, i) => values[i] is null).ToCSVColumn()}\n");
-        Console.WriteLine("Press any key to exit...");
-        Console.ReadKey();
         try {
             Environment.Exit(1);
         } catch (SecurityException) {
@@ -83,10 +81,10 @@ public static class ApiConfiguration {
         });
         
         services.AddDbContext<OpentubeDBContext>(ob => {
-            ob.UseLazyLoadingProxies().UseNpgsql(conf[Env.ConnectionStrings.Default]);
+            ob.UseLazyLoadingProxies().UseNpgsql(conf[EnvKeys.ConnectionStrings.Default]);
         });
         
-        CDNService.SetPaths(conf[Env.FilesDir]!);
+        CDNService.SetPaths(conf[EnvKeys.FilesDir]!);
         var jwtConfig = conf.GetSection("JwtConfig").Get<JwtConfig>()!;
         var mailCreds =  conf.GetSection("MailConfig").Get<MailConfig>()!;
         services.AddDependencies(mailCreds, jwtConfig);
@@ -120,7 +118,7 @@ public static class ApiConfiguration {
                 options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 options.QueueLimit = 10;
             }));
-        GlobalFFOptions.Configure(options => options.BinaryFolder = conf[Env.FFMpegPath]!);
+        GlobalFFOptions.Configure(options => options.BinaryFolder = conf[EnvKeys.FFMpegPath]!);
         return services;
     }
 
