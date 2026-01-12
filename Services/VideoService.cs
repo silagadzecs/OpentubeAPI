@@ -56,7 +56,7 @@ public class VideoService(OpentubeDBContext context) : IVideoService {
                         .WithCustomArgument("-v fatal -stats") //Makes FFmpeg output only stats and fatal errors
                         .AddVAAPIArguments()
                         .AddBitrateArguments(videoHeight)
-                        .WithCustomArgument("-map 0:a? -c:a aac -b:a 256k")
+                        .WithCustomArgument("-map 0:a? -c:a aac -b:a 256k") //TODO: add subtitle mapping
                         .AddDASHArguments()
                 ).NotifyOnProgress(progress => {
                     FFMpegLogger.Information("{VideoId}: Processed {ProgressTotalSeconds} seconds out of {DurationTotalSeconds}",

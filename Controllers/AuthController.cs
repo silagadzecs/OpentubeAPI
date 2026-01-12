@@ -21,8 +21,8 @@ public class AuthController(IAuthService authService) : ControllerBase {
 
     [HttpPost("register")]
     [Produces("application/json")]
-    public async Task<IActionResult> Register(IFormFile? profilePicture, [FromForm] RegisterDTO registrationData) {
-        return (await authService.Register(registrationData, profilePicture)).ToActionResult();
+    public async Task<IActionResult> Register(RegisterDTO registrationData) {
+        return (await authService.Register(registrationData)).ToActionResult();
     }
 
     [HttpPost("verify")]
@@ -59,6 +59,18 @@ public class AuthController(IAuthService authService) : ControllerBase {
     [HttpPost("logout-devices")]
     public async Task<IActionResult> LogoutDevices(List<string> refreshTokenIds) {
         return (await authService.DeleteRefreshTokens(refreshTokenIds, UserId!)).ToActionResult();
+    }
+
+    [Authorize]
+    [HttpPut]
+    public async Task<IActionResult> EditUser(UserEditDTO dto) {
+        return (await authService.EditUser(dto, UserId!)).ToActionResult();
+    }
+
+    [Authorize]
+    [HttpDelete]
+    public async Task<IActionResult> DeleteUser([FromBody] string password) {
+        return (await authService.DeleteUser(UserId!, password)).ToActionResult();
     }
     
 }

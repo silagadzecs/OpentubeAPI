@@ -7,6 +7,7 @@ using OpentubeAPI.DTOs;
 using OpentubeAPI.Models;
 using OpentubeAPI.Services.Interfaces;
 using OpentubeAPI.Utilities;
+using Serilog;
 using UAParser;
 
 namespace OpentubeAPI.Services;
@@ -16,7 +17,7 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
         var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId.ToGuid());
         return new Result(new UserDTO(user!)); //User cannot be null as them existing was checked during the JWT verification
     }
-    public async Task<Result> Register(RegisterDTO dto, IFormFile? profilePicture) {
+    public async Task<Result> Register(RegisterDTO dto) {
         dto.Email = dto.Email.Trim().ToLower();
         dto.Username = dto.Username.Trim().ToLower();
         var emailUser = await context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
@@ -46,10 +47,10 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
             PasswordHash = Argon2.Hash(dto.Password)
         };
         
-        if (profilePicture is not null) {
+        if (dto.ProfilePicture is not null) {
             Directory.CreateDirectory(CDNService.ImagePath);
             var filename = Guid.NewGuid().ToString();
-            var extension = profilePicture.FileName.Split(".").Last();
+            var extension = dto.ProfilePicture.FileName.Split(".").Last();
             filename = $"{filename}.{extension}";
             var fileDir = Path.Combine(CDNService.ImagePath, filename);
             try {
@@ -58,7 +59,7 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
                     FileMode.CreateNew,
                     FileAccess.ReadWrite
                 );
-                await profilePicture.CopyToAsync(stream);
+                await dto.ProfilePicture.CopyToAsync(stream);
 
                 if (!stream.GetMimeType().StartsWith("image/")) {
                     File.Delete(fileDir);
@@ -197,7 +198,82 @@ public class AuthService(OpentubeDBContext context, MailService mailService, Jwt
             rt.Created
         }));
     }
-    
+
+    public async Task<Result> EditUser(UserEditDTO dto, string userId) {
+        dto.Username = dto.Username.Trim().ToLower();
+        dto.Email = dto.Email.Trim().ToLower();
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId.ToGuid());
+        
+        if (dto.ProfilePicture is not null) {
+            if (!dto.ProfilePicture.OpenReadStream().GetMimeType().StartsWith("image/")) {
+                return new Result(new Error("ProfilePicture", "Invalid profile picture"));
+            }
+
+            var filename = Guid.NewGuid() + Path.GetExtension(dto.ProfilePicture.FileName);
+            var path = Path.Combine(CDNService.ImagePath, filename);
+            try {
+                await using var fs = new FileStream(path, FileMode.CreateNew);
+                await dto.ProfilePicture.CopyToAsync(fs);
+            }
+            catch (Exception ex) {
+                Log.Error(ex, "Error saving profile picture");
+                return new Result(new Error("ProfilePicture", "Something went wrong saving profile picture")) {
+                    StatusCode = 500
+                };
+            }
+
+            try {
+                File.Delete(Path.Combine(CDNService.ImagePath, user.ProfilePicture));
+            }
+            catch {
+                // ignored
+            }
+            finally {
+                user.ProfilePicture = filename;
+                await context.SaveChangesAsync();
+            }
+        }
+        
+        if (user.Username != dto.Username) {
+            var usernameUser = await context.Users.FirstOrDefaultAsync(u => u.Username == dto.Username);
+            if (usernameUser is not null && 
+                !(usernameUser is { Verified: false, Active: false } &&
+                 DateTime.UtcNow - usernameUser.CreationDate > TimeSpan.FromDays(30))) {
+                return new Result(new Error("Username", "Username is already taken"));
+            }
+        }
+       
+        if (user.Email != dto.Email) {
+            var emailUser = await context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+            if (emailUser is not null &&
+                !(emailUser is { Verified: false, Active: false } &&
+                 DateTime.UtcNow - emailUser.CreationDate > TimeSpan.FromDays(30))) {
+                return new Result(new Error("Email", "Email is already taken"));
+            }
+        }
+
+        if (dto.NewPassword is not null) {
+            if (!Argon2.Verify(user.PasswordHash, dto.CurrentPassword)) {
+                return new Result(new Error("CurrentPassword", "Incorrect password"));
+            }
+            user.PasswordHash = Argon2.Hash(dto.NewPassword);
+        }
+        user.DisplayName = dto.DisplayName;
+        user.Username = dto.Username;
+        user.Email = dto.Email;
+        await context.SaveChangesAsync();
+        return new Result(new UserDTO(user));
+    }
+    public async Task<Result> DeleteUser(string userId, string currentPassword) {
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Id == userId.ToGuid());
+        if (!Argon2.Verify(user!.PasswordHash, currentPassword)) {
+            return new Result(new Error("CurrentPassword", "Incorrect password"));
+        }
+        context.Users.Remove(user);
+        await context.SaveChangesAsync();
+        return new Result("Successfully removed user");
+    }
+
     public async Task<bool> UserExistsAsync(string userId) {
         return (await context.Users.FindAsync(userId.ToGuid())) is not null;
     }

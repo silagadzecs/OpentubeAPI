@@ -10,10 +10,10 @@ namespace OpentubeAPI.Models;
 [Index(nameof(Username), IsUnique = true)]
 public class User {
     [Key] public Guid Id { get; init; } = Guid.NewGuid();
-    [MaxLength(256)] public required string DisplayName { get; init; }
-    [MaxLength(256)] public required string Username { get; init; }
-    [MaxLength(256)] public required string Email { get; init; }
-    [MaxLength(256)] public required string PasswordHash { get; init; }
+    [MaxLength(256)] public required string DisplayName { get; set; }
+    [MaxLength(256)] public required string Username { get; set; }
+    [MaxLength(256)] public required string Email { get; set; }
+    [MaxLength(256)] public required string PasswordHash { get; set; }
     [MaxLength(256)] public string ProfilePicture { get; set; } = string.Empty;  
     public bool Verified { get; set; }
     public bool DeletionRequested { get; init; }
